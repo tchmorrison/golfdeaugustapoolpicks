@@ -194,6 +194,7 @@
   <button onclick="showTab('masters',this)">📊 Masters Board</button>
   <button id="nav-scores" onclick="showTab('scores',this)">✏️ Update Scores</button>
   <button onclick="showTab('rules',this)">📋 Rules</button>
+  <button onclick="doRefresh()" style="margin-left:auto;" title="Refresh data from server">🔄</button>
 </nav>
 
 <main>
@@ -516,22 +517,94 @@ const MASTERS_FIELD=[
 const MASTERS_PLAYERS=[...new Set(MASTERS_FIELD)].sort((a,b)=>a.localeCompare(b));
 
 const selected={usa:null,gb:null,eu:null,row:null,wc:null};
-const SK='golfdeaugusta2026v3';
 let appData={participants:[],scores:{}};
 let mFilter='all';
 let isAdmin=false;
+let isLoading=false;
+
+// ═══ GOOGLE SHEETS BACKEND ═══
+// PASTE YOUR WEB APP URL HERE (from Apps Script deployment)
+const WEB_APP_URL='https://tchmorrison.github.io/golfdeaugustapoolpicks/';
 
 // Registration deadline: 14:00 BST (13:00 UTC) on Wed 8 Apr 2026
 const REG_DEADLINE=new Date('2026-04-08T13:00:00Z');
 
-function loadData(){try{const r=localStorage.getItem(SK);return r?JSON.parse(r):{participants:[],scores:{}};}catch(e){return{participants:[],scores:{}};}}
-function saveData(d){localStorage.setItem(SK,JSON.stringify(d));}
+async function loadData(){
+  try{
+    const res=await fetch(`${WEB_APP_URL}?action=getAll`);
+    const data=await res.json();
+    if(data.error)throw new Error(data.error);
+    return{participants:data.participants||[],scores:data.scores||{}};
+  }catch(e){
+    console.error('Load error:',e);
+    return{participants:[],scores:{}};
+  }
+}
 
-function initApp(){
-  appData=loadData();
+async function saveParticipant(participant){
+  try{
+    const res=await fetch(`${WEB_APP_URL}?action=addParticipant&data=${encodeURIComponent(JSON.stringify(participant))}`);
+    const result=await res.json();
+    if(result.error)throw new Error(result.error);
+    return result;
+  }catch(e){
+    console.error('Save participant error:',e);
+    throw e;
+  }
+}
+
+async function deleteParticipant(name){
+  try{
+    const res=await fetch(`${WEB_APP_URL}?action=removeParticipant&name=${encodeURIComponent(name)}`);
+    const result=await res.json();
+    if(result.error)throw new Error(result.error);
+    return result;
+  }catch(e){
+    console.error('Delete error:',e);
+    throw e;
+  }
+}
+
+async function saveScoresToSheet(scores){
+  try{
+    const res=await fetch(`${WEB_APP_URL}?action=updateScores&data=${encodeURIComponent(JSON.stringify(scores))}`);
+    const result=await res.json();
+    if(result.error)throw new Error(result.error);
+    return result;
+  }catch(e){
+    console.error('Save scores error:',e);
+    throw e;
+  }
+}
+
+async function refreshData(){
+  appData=await loadData();
+  renderTeams();renderLeaderboard();renderMasters();renderScores();
+}
+
+async function doRefresh(){
+  showLoading(true);
+  try{
+    await refreshData();
+  }catch(e){
+    alert('Failed to refresh: '+e.message);
+  }finally{
+    showLoading(false);
+  }
+}
+
+async function initApp(){
+  showLoading(true);
+  appData=await loadData();
+  showLoading(false);
   renderAdminBar();
   checkRegistration();
   renderOwgr();renderTeams();renderLeaderboard();renderMasters();renderScores();
+}
+
+function showLoading(show){
+  isLoading=show;
+  document.body.style.cursor=show?'wait':'default';
 }
 
 // ═══ ADMIN MODE ═══
@@ -652,7 +725,7 @@ function pick(slot,name,rank,cat,nat){selected[slot]={name,rank,cat,nat};documen
 function closeDD(slot,d){setTimeout(()=>document.getElementById('dd-'+slot).classList.remove('open'),d);}
 
 // ═══ SUBMIT PICKS ═══
-function submitPicks(){
+async function submitPicks(){
   const name=document.getElementById('participant-name').value.trim();
   document.getElementById('picks-error').style.display='none';
   document.getElementById('picks-success').style.display='none';
@@ -668,13 +741,23 @@ function submitPicks(){
   if(t20count()>2)return showErr(`You have ${t20count()} players in the OWGR Top 20. Maximum is 2.`);
   const names=[selected.usa.name,selected.gb.name,selected.eu.name,selected.row.name,selected.wc.name];
   if(new Set(names).size<5)return showErr('You cannot pick the same player twice.');
-  appData.participants.push({name,picks:{usa:{...selected.usa},gb:{...selected.gb},eu:{...selected.eu},row:{...selected.row},wc:{...selected.wc}},at:new Date().toISOString()});
-  saveData(appData);
-  document.getElementById('picks-success').textContent=`Picks submitted for ${name}! Good luck ⛳`;
-  document.getElementById('picks-success').style.display='block';
-  document.getElementById('participant-name').value='';
-  ['usa','gb','eu','row','wc'].forEach(s=>{selected[s]=null;document.getElementById('pick-'+s).value='';});
-  updateCounter();renderTeams();renderLeaderboard();renderMasters();renderScores();
+  
+  const participant={name,picks:{usa:{...selected.usa},gb:{...selected.gb},eu:{...selected.eu},row:{...selected.row},wc:{...selected.wc}},at:new Date().toISOString()};
+  
+  try{
+    showLoading(true);
+    await saveParticipant(participant);
+    appData.participants.push(participant);
+    document.getElementById('picks-success').textContent=`Picks submitted for ${name}! Good luck ⛳`;
+    document.getElementById('picks-success').style.display='block';
+    document.getElementById('participant-name').value='';
+    ['usa','gb','eu','row','wc'].forEach(s=>{selected[s]=null;document.getElementById('pick-'+s).value='';});
+    updateCounter();renderTeams();renderLeaderboard();renderMasters();renderScores();
+  }catch(e){
+    showErr('Failed to save picks: '+e.message);
+  }finally{
+    showLoading(false);
+  }
 }
 function showErr(m){const e=document.getElementById('picks-error');e.textContent=m;e.style.display='block';}
 
@@ -697,8 +780,18 @@ function renderTeams(){
 }
 function removePart(name){
   if(!confirm(`Remove ${name}'s picks?`))return;
-  appData.participants=appData.participants.filter(p=>p.name!==name);
-  saveData(appData);renderTeams();renderLeaderboard();renderMasters();renderScores();
+  (async()=>{
+    try{
+      showLoading(true);
+      await deleteParticipant(name);
+      appData.participants=appData.participants.filter(p=>p.name!==name);
+      renderTeams();renderLeaderboard();renderMasters();renderScores();
+    }catch(e){
+      alert('Failed to remove: '+e.message);
+    }finally{
+      showLoading(false);
+    }
+  })();
 }
 
 // ═══ POOL LEADERBOARD ═══
@@ -791,9 +884,18 @@ function saveMasters(){
     const r4=parseFloat(document.getElementById('r4_'+safe)?.value)||0;
     appData.scores[name]={score:isMC?10:r1+r2+r3+r4,mc:isMC,r1:r1||'',r2:r2||'',r3:r3||'',r4:r4||''};
   });
-  saveData(appData);
-  const msg=document.getElementById('masters-saved');msg.style.display='block';setTimeout(()=>msg.style.display='none',2500);
-  renderMasters();renderLeaderboard();renderTeams();renderScores();
+  (async()=>{
+    try{
+      showLoading(true);
+      await saveScoresToSheet(appData.scores);
+      const msg=document.getElementById('masters-saved');msg.style.display='block';setTimeout(()=>msg.style.display='none',2500);
+      renderMasters();renderLeaderboard();renderTeams();renderScores();
+    }catch(e){
+      alert('Failed to save scores: '+e.message);
+    }finally{
+      showLoading(false);
+    }
+  })();
 }
 
 // ═══ SCORES TAB ═══
@@ -826,9 +928,18 @@ function saveScores(){
     const isMC=mcEl.checked;const existing=appData.scores[pl.name]||{};
     appData.scores[pl.name]={...existing,score:isMC?10:parseInt(scEl.value)||0,mc:isMC};
   });
-  saveData(appData);
-  const msg=document.getElementById('scores-saved2');msg.style.display='block';setTimeout(()=>msg.style.display='none',2500);
-  renderTeams();renderLeaderboard();renderMasters();
+  (async()=>{
+    try{
+      showLoading(true);
+      await saveScoresToSheet(appData.scores);
+      const msg=document.getElementById('scores-saved2');msg.style.display='block';setTimeout(()=>msg.style.display='none',2500);
+      renderTeams();renderLeaderboard();renderMasters();
+    }catch(e){
+      alert('Failed to save scores: '+e.message);
+    }finally{
+      showLoading(false);
+    }
+  })();
 }
 
 // ═══ TABS ═══
@@ -1038,7 +1149,8 @@ async function fetchLiveScores(){
       }
     });
     
-    saveData(appData);
+    // Save to Google Sheets
+    await saveScoresToSheet(appData.scores);
     lastFetchTime=new Date();
     
     // Success state
