@@ -1430,7 +1430,10 @@
 
     async function loadData() {
       try {
-        const res = await fetch(`${WEB_APP_URL}?action=getAll`);
+        const res = await fetch(`${WEB_APP_URL}?action=getAll`, {
+          method: 'GET',
+          redirect: 'follow'
+        });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         return { participants: data.participants || [], scores: data.scores || {} };
@@ -1442,7 +1445,15 @@
 
     async function saveParticipant(participant) {
       try {
-        const res = await fetch(`${WEB_APP_URL}?action=addParticipant&data=${encodeURIComponent(JSON.stringify(participant))}`);
+        const params = new URLSearchParams();
+        params.append('action', 'addParticipant');
+        params.append('data', JSON.stringify(participant));
+        
+        const res = await fetch(WEB_APP_URL, {
+          method: 'POST',
+          body: params,
+          redirect: 'follow'
+        });
         const result = await res.json();
         if (result.error) throw new Error(result.error);
         return result;
@@ -1454,7 +1465,15 @@
 
     async function deleteParticipant(name) {
       try {
-        const res = await fetch(`${WEB_APP_URL}?action=removeParticipant&name=${encodeURIComponent(name)}`);
+        const params = new URLSearchParams();
+        params.append('action', 'removeParticipant');
+        params.append('name', name);
+        
+        const res = await fetch(WEB_APP_URL, {
+          method: 'POST',
+          body: params,
+          redirect: 'follow'
+        });
         const result = await res.json();
         if (result.error) throw new Error(result.error);
         return result;
@@ -1466,7 +1485,15 @@
 
     async function saveScoresToSheet(scores) {
       try {
-        const res = await fetch(`${WEB_APP_URL}?action=updateScores&data=${encodeURIComponent(JSON.stringify(scores))}`);
+        const params = new URLSearchParams();
+        params.append('action', 'updateScores');
+        params.append('data', JSON.stringify(scores));
+        
+        const res = await fetch(WEB_APP_URL, {
+          method: 'POST',
+          body: params,
+          redirect: 'follow'
+        });
         const result = await res.json();
         if (result.error) throw new Error(result.error);
         return result;
