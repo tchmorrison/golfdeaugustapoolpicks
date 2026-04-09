@@ -1400,7 +1400,7 @@
       "Nicolai Højgaard", "Marco Penge", "Daniel Berger", "Aaron Rai", "Nico Echavarria",
       "Jason Day", "Jake Knapp", "Michael Kim", "Corey Conners", "Sam Stevens",
       "Kristoffer Reitan", "Michael Brennan", "Andrew Novak", "Matt McCarty", "Brian Harman",
-      "Ryan Fox", "Adam Scott", "Pierceson Coody", "Ryo Hisatsune", "Sami Välimäki",
+      "Ryan Fox", "Gary Woodland", "Adam Scott", "Pierceson Coody", "Ryo Hisatsune", "Sami Välimäki",
       "Rasmus Højgaard", "Michael Thorbjornsen", "Max Greyserman", "Thomas Detry", "Jordan Spieth",
       "Harry Hall", "John Keefer", "Rickie Fowler", "Matt Wallace", "Nick Taylor",
       "Jordan Smith", "Rasmus Neergaard-Petersen", "Casey Jarvis", "Sungjae Im",
@@ -1411,7 +1411,12 @@
       "Andy Sullivan", "Tom McKibbin", "Alex Smalley", "Tony Finau", "Emiliano Grillo",
       "Davis Riley", "Keita Nakajima", "Tom Kim", "Byeong Hun An", "Carlos Ortiz",
       "Max Homa", "Joaquin Niemann", "Seamus Power", "Brooks Koepka", "Luke Clanton",
-      "Cameron Smith", "Thomas Pieters", "Nick Dunlap"
+      "Cameron Smith", "Thomas Pieters", "Nick Dunlap",
+      // Past champions and additional invitees
+      "José María Olazábal", "Sergio García", "Charl Schwartzel", "Brandon Holtz",
+      "Phil Mickelson", "Tiger Woods", "Bubba Watson", "Danny Willett", "Patrick Reed",
+      "Dustin Johnson", "Angel Cabrera", "Vijay Singh", "Fred Couples", "Bernhard Langer",
+      "Larry Mize", "Sandy Lyle", "Jack Nicklaus", "Mark O'Meara", "Zach Johnson"
     ];
     const MASTERS_PLAYERS = [...new Set(MASTERS_FIELD)].sort((a, b) => a.localeCompare(b));
 
@@ -1423,7 +1428,7 @@
 
     // ═══ GOOGLE SHEETS BACKEND ═══
     // PASTE YOUR WEB APP URL HERE (from Apps Script deployment)
-    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby53iyFgGyFUSzR9dXrmskMGOwUFDiUjtX-YTbeT8Laso5o2cV5zHer4iOXRKKbTS4zvw/exec';
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyf7SoiBZZ8duWOadJJbWWvM2459eytkocYJkSjtaBeKb406X-XQWO-JUBmyXdCOMJOXg/exec';
 
     // Registration deadline: 14:00 BST (13:00 UTC) on Wed 8 Apr 2026
     const REG_DEADLINE = new Date('2026-04-08T13:00:00Z');
@@ -1759,7 +1764,7 @@
       // Reset filter if on 'picked' but can't view
       if (mFilter === 'picked' && !showPicked) mFilter = 'all';
       let rows = MASTERS_PLAYERS.map(name => {
-        const s = sc[name] || { score: 0, mc: false, r1: '', r2: '', r3: '', r4: '' };
+        const s = sc[name] || { score: 0, mc: false, thru: 0, position: '-', currentRound: 1, r1: '', r2: '', r3: '', r4: '' };
         return { name, s, isPicked: showPicked && picked.has(name) };
       });
       rows.sort((a, b) => {
@@ -1771,12 +1776,27 @@
       const wrap = document.getElementById('masters-wrap');
       if (!rows.length) { wrap.innerHTML = '<div class="empty">No players match this filter.</div>'; return; }
       let pos = 1;
-      wrap.innerHTML = `<table class="mlt"><thead><tr><th>Pos</th><th>Player</th><th style="text-align:right">Total</th><th style="text-align:right">R1</th><th style="text-align:right">R2</th><th style="text-align:right">R3</th><th style="text-align:right">R4</th><th>MC</th></tr></thead><tbody>` +
+      // Helper to format round score as +/- par
+      const fmtRound = (v) => {
+        if (v === '' || v === null || v === undefined) return '—';
+        const n = parseInt(v);
+        if (isNaN(n)) return '—';
+        if (n === 0) return 'E';
+        return n > 0 ? '+' + n : String(n);
+      };
+      wrap.innerHTML = `<table class="mlt"><thead><tr><th>Pos</th><th>Player</th><th style="text-align:right">Total</th><th style="text-align:center">Thru</th><th style="text-align:right">R1</th><th style="text-align:right">R2</th><th style="text-align:right">R3</th><th style="text-align:right">R4</th><th>MC</th></tr></thead><tbody>` +
         rows.map((r, i) => {
           const { name, s, isPicked } = r;
           const safe = name.replace(/[\s\W]/g, '_');
           const sd = s.mc ? 'MC' : (s.score === 0 ? 'E' : s.score > 0 ? '+' + s.score : s.score);
           const cls = s.mc ? 'smc' : s.score < 0 ? 'su' : s.score > 0 ? 'so' : 'se';
+          // Thru display: F = finished round, or hole number, or "-" if not started
+          const thruDisplay = s.thru === 18 ? 'F' : s.thru > 0 ? s.thru : '-';
+          // Round score colors
+          const r1Cls = s.r1 < 0 ? 'su' : s.r1 > 0 ? 'so' : 'se';
+          const r2Cls = s.r2 < 0 ? 'su' : s.r2 > 0 ? 'so' : 'se';
+          const r3Cls = s.r3 < 0 ? 'su' : s.r3 > 0 ? 'so' : 'se';
+          const r4Cls = s.r4 < 0 ? 'su' : s.r4 > 0 ? 'so' : 'se';
           let posLabel;
           if (i === 0) { posLabel = 1; pos = 1; }
           else {
@@ -1788,10 +1808,11 @@
       <td style="font-family:'Playfair Display',serif;font-weight:700;">${posLabel}</td>
       <td>${name}${isPicked && showPicked ? '<span class="pb">PICKED</span>' : ''}</td>
       <td style="text-align:right"><span class="${cls}" style="font-weight:600;">${sd}</span></td>
-      <td style="text-align:right"><input class="ri" type="number" id="r1_${safe}" value="${s.r1 !== '' ? s.r1 : ''}" placeholder="—" min="-12" max="12"></td>
-      <td style="text-align:right"><input class="ri" type="number" id="r2_${safe}" value="${s.r2 !== '' ? s.r2 : ''}" placeholder="—" min="-12" max="12"></td>
-      <td style="text-align:right"><input class="ri" type="number" id="r3_${safe}" value="${s.r3 !== '' ? s.r3 : ''}" placeholder="—" min="-12" max="12"></td>
-      <td style="text-align:right"><input class="ri" type="number" id="r4_${safe}" value="${s.r4 !== '' ? s.r4 : ''}" placeholder="—" min="-12" max="12"></td>
+      <td style="text-align:center;color:var(--text-muted);font-size:0.85rem;">${thruDisplay}</td>
+      <td style="text-align:right"><span class="${r1Cls}" style="font-size:0.9rem;">${fmtRound(s.r1)}</span></td>
+      <td style="text-align:right"><span class="${r2Cls}" style="font-size:0.9rem;">${fmtRound(s.r2)}</span></td>
+      <td style="text-align:right"><span class="${r3Cls}" style="font-size:0.9rem;">${fmtRound(s.r3)}</span></td>
+      <td style="text-align:right"><span class="${r4Cls}" style="font-size:0.9rem;">${fmtRound(s.r4)}</span></td>
       <td><input type="checkbox" id="mc_${safe}" ${s.mc ? 'checked' : ''} title="Missed cut"></td>
     </tr>`;
         }).join('') + '</tbody></table>';
@@ -1799,16 +1820,23 @@
 
     function saveMasters() {
       if (!appData.scores) appData.scores = {};
+      // Only update MC status from checkboxes - round scores come from live fetch
       MASTERS_PLAYERS.forEach(name => {
         const safe = name.replace(/[\s\W]/g, '_');
         const mcEl = document.getElementById('mc_' + safe);
         if (!mcEl) return;
         const isMC = mcEl.checked;
-        const r1 = parseFloat(document.getElementById('r1_' + safe)?.value) || 0;
-        const r2 = parseFloat(document.getElementById('r2_' + safe)?.value) || 0;
-        const r3 = parseFloat(document.getElementById('r3_' + safe)?.value) || 0;
-        const r4 = parseFloat(document.getElementById('r4_' + safe)?.value) || 0;
-        appData.scores[name] = { score: isMC ? 10 : r1 + r2 + r3 + r4, mc: isMC, r1: r1 || '', r2: r2 || '', r3: r3 || '', r4: r4 || '' };
+        const existing = appData.scores[name] || { score: 0, r1: '', r2: '', r3: '', r4: '' };
+        // Recalculate total from round scores if not MC
+        const r1 = existing.r1 !== '' ? parseInt(existing.r1) || 0 : 0;
+        const r2 = existing.r2 !== '' ? parseInt(existing.r2) || 0 : 0;
+        const r3 = existing.r3 !== '' ? parseInt(existing.r3) || 0 : 0;
+        const r4 = existing.r4 !== '' ? parseInt(existing.r4) || 0 : 0;
+        appData.scores[name] = { 
+          ...existing,
+          score: isMC ? 10 : (existing.score || r1 + r2 + r3 + r4), 
+          mc: isMC 
+        };
       });
       (async () => {
         try {
@@ -1935,6 +1963,25 @@
       'Ryo Hisatsune': 'Ryo Hisatsune',
       'John Keefer': 'John Keefer',
       'Johnny Keefer': 'John Keefer',
+      'Gary Woodland': 'Gary Woodland',
+      'Chris Kirk': 'Chris Kirk',
+      // Past champions with accents
+      'José María Olazábal': 'José María Olazábal',
+      'Jose Maria Olazabal': 'José María Olazábal',
+      'Sergio García': 'Sergio García',
+      'Sergio Garcia': 'Sergio García',
+      'Charl Schwartzel': 'Charl Schwartzel',
+      'Brandon Holtz': 'Brandon Holtz',
+      'Phil Mickelson': 'Phil Mickelson',
+      'Tiger Woods': 'Tiger Woods',
+      'Bubba Watson': 'Bubba Watson',
+      'Danny Willett': 'Danny Willett',
+      'Dustin Johnson': 'Dustin Johnson',
+      'Angel Cabrera': 'Angel Cabrera',
+      'Ángel Cabrera': 'Angel Cabrera',
+      'Vijay Singh': 'Vijay Singh',
+      'Fred Couples': 'Fred Couples',
+      'Bernhard Langer': 'Bernhard Langer',
     };
 
     function normalizeName(name) {
@@ -1989,38 +2036,34 @@
       statusText.textContent = 'Connecting...';
 
       try {
-        // ESPN Golf Leaderboard API - Masters Tournament
-        // The tournament ID for Masters changes yearly, we'll try the leaderboard endpoint
-        const response = await fetch('https://site.web.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard', {
-          headers: { 'Accept': 'application/json' }
-        });
+        // Fetch live scores from Google Apps Script backend (which calls ESPN API)
+        // This avoids CORS issues since the request goes through our server
+        const liveRes = await fetch(`${WEB_APP_URL}?action=getLiveScores`);
+        if (!liveRes.ok) throw new Error(`Score fetch failed (${liveRes.status}). Please try again.`);
+        
+        const liveData = await liveRes.json();
+        if (liveData.error) throw new Error(liveData.error);
 
-        if (!response.ok) throw new Error(`ESPN API error: ${response.status}`);
+        const round = liveData.round || 1;
+        const stateRaw = (liveData.roundState || '').toLowerCase();
+        const isLive = stateRaw.includes('progress');
+        const isComplete = stateRaw.includes('complete');
+        const sourceUsed = liveData.source || 'ESPN';
 
-        const data = await response.json();
+        const competitors = (liveData.players || []).map(p => ({
+          _mastersName: p.name,
+          _toPar: p.mc ? 10 : (parseInt(p.toPar) || 0),
+          _isCut: !!p.mc,
+          _thru: p.thru || 0,
+          _position: p.position || '-',
+          _currentRound: p.currentRound || 1,
+          _r1: p.r1 != null ? parseInt(p.r1) : '',
+          _r2: p.r2 != null ? parseInt(p.r2) : '',
+          _r3: p.r3 != null ? parseInt(p.r3) : '',
+          _r4: p.r4 != null ? parseInt(p.r4) : '',
+        }));
 
-        // Find the Masters tournament (or current/most recent major)
-        let tournament = null;
-        if (data.events && data.events.length > 0) {
-          // Look for Masters specifically, or take the first event
-          tournament = data.events.find(e =>
-            e.name?.toLowerCase().includes('masters') ||
-            e.shortName?.toLowerCase().includes('masters')
-          ) || data.events[0];
-        }
-
-        if (!tournament || !tournament.competitions || !tournament.competitions[0]) {
-          throw new Error('No tournament data available. The Masters may not have started yet.');
-        }
-
-        const competition = tournament.competitions[0];
-        const competitors = competition.competitors || [];
-
-        // Determine tournament status
-        const status = competition.status?.type?.name || 'scheduled';
-        const isLive = status === 'in' || status === 'inProgress';
-        const isComplete = status === 'final' || status === 'complete';
-        const round = competition.status?.period || 1;
+        if (!competitors.length) throw new Error('No player data returned. Tournament may not be active yet.');
 
         // Update tournament status badge
         if (isComplete) {
@@ -2030,7 +2073,7 @@
           tournamentStatus.textContent = `Live - R${round}`;
           tournamentStatus.className = 'tournament-status live';
         } else {
-          tournamentStatus.textContent = 'Upcoming';
+          tournamentStatus.textContent = `R${round}`;
           tournamentStatus.className = 'tournament-status upcoming';
         }
 
@@ -2039,38 +2082,22 @@
         if (!appData.scores) appData.scores = {};
 
         competitors.forEach(c => {
-          const athlete = c.athlete || {};
-          const espnName = athlete.displayName || athlete.shortName || '';
-          const playerName = findPlayerMatch(espnName);
-
+          const playerName = findPlayerMatch(c._mastersName);
           if (playerName) {
             matched++;
-            const score = c.score || 0;
-            const toPar = typeof c.score === 'number' ? c.score : (parseInt(c.statistics?.find(s => s.name === 'scoreToPar')?.value) || 0);
-            const status = c.status?.type?.name || '';
-            const isCut = status === 'cut' || c.status?.displayValue?.toLowerCase().includes('cut');
-
-            // Get round scores
-            const linescores = c.linescores || [];
-            const r1 = linescores[0]?.value !== undefined ? parseInt(linescores[0].value) - 72 : '';
-            const r2 = linescores[1]?.value !== undefined ? parseInt(linescores[1].value) - 72 : '';
-            const r3 = linescores[2]?.value !== undefined ? parseInt(linescores[2].value) - 72 : '';
-            const r4 = linescores[3]?.value !== undefined ? parseInt(linescores[3].value) - 72 : '';
-
             const existing = appData.scores[playerName] || {};
             const newScore = {
-              score: isCut ? 10 : toPar,
-              mc: isCut,
-              r1: r1 !== '' ? r1 : (existing.r1 || ''),
-              r2: r2 !== '' ? r2 : (existing.r2 || ''),
-              r3: r3 !== '' ? r3 : (existing.r3 || ''),
-              r4: r4 !== '' ? r4 : (existing.r4 || ''),
+              score: c._toPar,
+              mc: c._isCut,
+              thru: c._thru,
+              position: c._position,
+              currentRound: c._currentRound,
+              r1: c._r1 !== '' ? c._r1 : (existing.r1 || ''),
+              r2: c._r2 !== '' ? c._r2 : (existing.r2 || ''),
+              r3: c._r3 !== '' ? c._r3 : (existing.r3 || ''),
+              r4: c._r4 !== '' ? c._r4 : (existing.r4 || ''),
             };
-
-            // Check if anything changed
-            if (JSON.stringify(existing) !== JSON.stringify(newScore)) {
-              updated++;
-            }
+            if (JSON.stringify(existing) !== JSON.stringify(newScore)) updated++;
             appData.scores[playerName] = newScore;
           }
         });
@@ -2082,7 +2109,7 @@
         // Success state
         dot.className = 'live-dot';
         statusText.textContent = `Updated ${formatTime(lastFetchTime)}`;
-        successEl.textContent = `✓ Fetched ${competitors.length} players from ESPN. Matched ${matched} to field, ${updated} scores updated.`;
+        successEl.textContent = `✓ Fetched ${competitors.length} players from ${sourceUsed}. Matched ${matched} to field, ${updated} scores updated.`;
         successEl.style.display = 'block';
         setTimeout(() => successEl.style.display = 'none', 5000);
 
@@ -2093,7 +2120,7 @@
         renderScores();
 
       } catch (err) {
-        console.error('ESPN fetch error:', err);
+        console.error('Live score fetch error:', err);
         dot.className = 'live-dot error';
         statusText.textContent = 'Error';
         errorEl.textContent = `✗ ${err.message}. You can still enter scores manually.`;
